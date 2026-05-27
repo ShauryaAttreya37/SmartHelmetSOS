@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import torch
 import torch.nn as nn
@@ -39,7 +40,7 @@ class PINN(nn.Module):
 
 @st.cache_resource
 def load_model():
-    ck = torch.load("roadsos_pinn.pt", map_location="cpu", weights_only=False)
+    ck = torch.load(os.path.join(os.path.dirname(__file__), "roadsos_pinn.pt"), map_location="cpu", weights_only=False)
     m = PINN()
     m.load_state_dict(ck["model_state"])
     m.eval()
@@ -49,8 +50,8 @@ def load_model():
 def hic15(ax, ay, az, fs, wms=15):
     ar = np.sqrt(ax**2+ay**2+az**2)/G
     dt = 1/fs; mw = max(2, int(wms*1e-3/dt)); h = 0
+    cs = np.cumsum(ar)
     for w in range(2, mw+1):
-        cs = np.cumsum(ar)
         ms = (cs[w:]-cs[:-w])/w
         vals = w*dt*(np.maximum(ms,0)**2.5)
         h = max(h, vals.max())
@@ -72,12 +73,12 @@ def sim(sc, dur, fs, seed=42):
         th = 0.05*np.sin(0.2*t)+0.01*np.random.randn(n)
         mu = np.clip(MU_DRY+0.02*np.random.randn(n), 0.6, 0.9)
     elif sc == 1:
-        pi = int(0.4*n); v = 13.9+0.8*np.sin(0.3*t)
+        pivot = int(0.4*n); v = 13.9+0.8*np.sin(0.3*t)
         mu = np.ones(n)*MU_DRY
-        dec = np.exp(-np.arange(n-pi)/(0.2*fs))
-        mu[pi:] = MU_OIL+(MU_DRY-MU_OIL)*dec[:n-pi]
+        dec = np.exp(-np.arange(n-pivot)/(0.2*fs))
+        mu[pivot:] = MU_OIL+(MU_DRY-MU_OIL)*dec[:n-pivot]
         mu = np.clip(mu, 0.05, 0.9)
-        th = 0.05*np.sin(0.2*t); th[pi:] += 0.3*(1-dec[:n-pi])
+        th = 0.05*np.sin(0.2*t); th[pivot:] += 0.3*(1-dec[:n-pivot])
     else:
         ii = int(0.25*n); sw = int(0.1*fs); v = np.ones(n)*16.7
         v[ii:ii+sw] = np.linspace(16.7,0,sw); v[ii+sw:] = 0
@@ -91,10 +92,10 @@ def sim(sc, dur, fs, seed=42):
     gy = 0.05*np.sin(0.1*t)+0.01*np.random.randn(n)
     gz = 0.03*np.cos(0.15*t)+0.01*np.random.randn(n)
     if sc == 2:
-        pw = int(0.01*fs); ii2 = int(0.25*n); pulse = np.zeros(n)
-        if ii2+pw < n:
-            pulse[ii2:ii2+pw] = 10*G*np.sin(np.linspace(0,np.pi,pw))
-            gx[ii2:ii2+pw] += 25*np.sin(np.linspace(0,np.pi,pw))
+        pw = int(0.01*fs); pulse = np.zeros(n)
+        if ii+pw < n:
+            pulse[ii:ii+pw] = 10*G*np.sin(np.linspace(0,np.pi,pw))
+            gx[ii:ii+pw] += 25*np.sin(np.linspace(0,np.pi,pw))
         ax += pulse
     return t, ax, ay, az, gx, gy, gz, v, th, mu
 
