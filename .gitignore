@@ -1,0 +1,21 @@
+# Model weights (large binary — track separately if needed)
+*.pt
+*.pth
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+
+# Generated plots
+*.png
+
+# Environment
+.env
+venv/
+.venv/
+
+# IDE / OS
+.vscode/
+.DS_Store
+Thumbs.db

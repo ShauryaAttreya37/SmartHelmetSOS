@@ -80,11 +80,29 @@ def sim(sc, dur, fs, seed=42):
         mu = np.clip(mu, 0.05, 0.9)
         th = 0.05*np.sin(0.2*t); th[pivot:] += 0.3*(1-dec[:n-pivot])
     else:
-        ii = int(0.25*n); sw = int(0.1*fs); v = np.ones(n)*16.7
-        v[ii:ii+sw] = np.linspace(16.7,0,sw); v[ii+sw:] = 0
+        # Phase 1: normal cruise → hard brake 150ms before impact
+        impact_t = 0.25 * dur
+        ii  = int(impact_t * fs)
+        pre = max(0, ii - int(0.15 * fs))
+        ii2 = ii + int(0.35 * fs)
+        v = np.ones(n) * 16.7
+        v[pre:ii]               = np.linspace(16.7, 16.7 * 0.65, ii - pre)
+        stop_w = int(0.05 * fs)
+        v[ii:ii + stop_w]       = np.linspace(16.7 * 0.65, 0.0, stop_w)
+        v[ii + stop_w:]         = 0.0
+        # Friction drops before impact
+        mu = np.ones(n) * MU_DRY
+        mu[pre:ii] = np.linspace(MU_DRY, MU_OIL + 0.05, ii - pre)
+        mu[ii:]    = MU_OIL
+        mu = np.clip(mu + 0.01*np.random.randn(n), 0.01, 0.9)
+        # Theta: slight lean during braking, rapid 200ms tip-over at impact
         th = np.zeros(n)
-        th[ii:] = np.clip(np.linspace(0,np.pi/2*1.2,n-ii), 0, np.pi/2)
-        mu = np.ones(n)*MU_DRY; mu[ii:] = MU_OIL
+        th[pre:ii] = 0.05 * np.linspace(0, 1, ii - pre)
+        tip_w = int(0.20 * fs)
+        th[ii:ii + tip_w] = np.clip(np.linspace(0, np.pi/2, tip_w), 0, np.pi/2)
+        th[ii + tip_w:]   = np.pi / 2
+        th = np.clip(th + 0.008*np.random.randn(n), 0, np.pi/2)
+
     ax = np.diff(v,prepend=v[0])*fs+0.1*np.random.randn(n)
     ay = v*np.gradient(th,1/fs)+0.1*np.random.randn(n)
     az = G*np.cos(th)+0.05*np.random.randn(n)
@@ -92,11 +110,23 @@ def sim(sc, dur, fs, seed=42):
     gy = 0.05*np.sin(0.1*t)+0.01*np.random.randn(n)
     gz = 0.03*np.cos(0.15*t)+0.01*np.random.randn(n)
     if sc == 2:
-        pw = int(0.01*fs); pulse = np.zeros(n)
-        if ii+pw < n:
-            pulse[ii:ii+pw] = 10*G*np.sin(np.linspace(0,np.pi,pw))
-            gx[ii:ii+pw] += 25*np.sin(np.linspace(0,np.pi,pw))
-        ax += pulse
+        # Primary impact: 120g halfsin over 25ms → HIC15 > 1000
+        ipw = int(0.025*fs); spw = int(0.015*fs)
+        pulse1 = np.zeros(n); pulse2 = np.zeros(n)
+        if ii + ipw < n:
+            pulse1[ii:ii+ipw] = 120*G * np.sin(np.linspace(0, np.pi, ipw))
+        if ii2 + spw < n:
+            pulse2[ii2:ii2+spw] = 30*G * np.sin(np.linspace(0, np.pi, spw))
+        ax += pulse1 + pulse2
+        az -= 0.25 * pulse1
+        ff_s = ii+ipw; ff_e = ff_s+int(0.03*fs)
+        if ff_e < n: az[ff_s:ff_e] *= 0.1
+        # Angular spikes exceeding BrIC thresholds (66.3 / 56.5 / 42.2 rad/s)
+        apw = int(0.030*fs)
+        if ii + apw < n:
+            gx[ii:ii+apw] += 78 * np.sin(np.linspace(0, np.pi, apw))  # > BRIC_X
+            gy[ii:ii+apw] += 62 * np.sin(np.linspace(0, np.pi, apw))  # > BRIC_Y
+            gz[ii:ii+apw] += 48 * np.sin(np.linspace(0, np.pi, apw))  # > BRIC_Z
     return t, ax, ay, az, gx, gy, gz, v, th, mu
 
 
